@@ -12,4 +12,5 @@ Run `cargo run` to solve the challenge.
 
 ## Benchmarking
 
-You can benchmark the solution with cargo-flamegraph. Run `cargo flamegraph` to generate a flamegraph of the solution.
+You can benchmark the solution with cargo-flamegraph.
+Run `CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph -- <file>` to generate a flamegraph of the solution.

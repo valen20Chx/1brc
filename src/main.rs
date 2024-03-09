@@ -67,17 +67,31 @@ fn main() -> IoResult<()> {
 
     let mut buffer = [0u8; 512];
     let mut tail = String::new();
+    let mut partial_chars = Vec::<u8>::new();
 
     while buf_reader.read(&mut buffer)? > 0 {
-        let mut content = std::str::from_utf8(&buffer).unwrap();
+        let mut new_buf = partial_chars.clone();
+        new_buf.extend_from_slice(&buffer);
+        let new_buf_ref = new_buf.as_ref();
+        let mut content: String = match std::str::from_utf8(new_buf_ref) {
+            Ok(content) => {
+                partial_chars.clear();
+                content.to_string()
+            }
+            Err(err) => {
+                let content =
+                    std::str::from_utf8(new_buf_ref[..err.valid_up_to()].as_ref()).unwrap();
+                partial_chars = new_buf[err.valid_up_to()..].to_vec();
+                content.to_string()
+            }
+        };
 
-        let temp_content = tail.clone() + content;
-        content = &temp_content;
+        content.insert_str(0, tail.as_str());
 
         if !content.ends_with("\n") {
             let last_line = content.rsplit("\n").next().unwrap();
             tail = last_line.to_string();
-            content = &content[..content.len() - last_line.len()];
+            content = content[..content.len() - last_line.len()].to_string();
         } else {
             tail.clear();
         }

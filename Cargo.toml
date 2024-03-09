@@ -15,7 +15,4 @@ rustflags = ["-C", "symbol-mangling-version=v0"]
 [profile.dev]
 debug = true
 
-[profile.release]
-debug = true
-
 [dependencies]

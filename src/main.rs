@@ -13,7 +13,13 @@ struct MeasurementCounter {
 fn read_line(buffer: String) -> (String, i32) {
     let (city, temp_str) = buffer.trim().split_once(";").unwrap();
 
-    let temp = temp_str.parse::<f32>().unwrap().ceil() as i32;
+    let temp = temp_str
+        .parse::<f32>()
+        .unwrap_or_else(|_| {
+            println!("Line: '{}'", buffer);
+            panic!()
+        })
+        .ceil() as i32;
 
     (city.to_string(), temp)
 }
@@ -54,12 +60,29 @@ fn main() -> Result<()> {
     let file = File::open(file_path)?;
     let mut buf_reader = BufReader::new(file);
 
-    let mut buffer = String::new();
+    let mut buffer = [0u8; 512];
+    let mut tail = String::new();
 
-    while buf_reader.read_line(&mut buffer)? > 0 {
-        let (city, temp) = read_line(buffer.clone());
-        measurement_counts = update_map(measurement_counts, city, temp);
-        buffer.clear();
+    while buf_reader.read(&mut buffer)? > 0 {
+        let mut content = std::str::from_utf8(&buffer).unwrap();
+
+        let temp_content = tail.clone() + content;
+        content = &temp_content;
+
+        if !content.ends_with("\n") {
+            let last_line = content.rsplit("\n").next().unwrap();
+            tail = last_line.to_string();
+            content = &content[..content.len() - last_line.len()];
+        } else {
+            tail.clear();
+        }
+
+        for line in content.split("\n") {
+            if !line.is_empty() {
+                let (city, temp) = read_line(line.into());
+                measurement_counts = update_map(measurement_counts, city, temp);
+            }
+        }
     }
 
     measurement_counts.iter().for_each(|(key, measurement)| {

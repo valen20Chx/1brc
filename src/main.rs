@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::env;
-use std::io::{prelude::*, Result};
+use std::io::{prelude::*, Result as IoResult};
 use std::{fs::File, io::BufReader};
 
 struct MeasurementCounter {
@@ -10,18 +10,23 @@ struct MeasurementCounter {
     count: i32,
 }
 
-fn read_line(buffer: String) -> (String, i32) {
-    let (city, temp_str) = buffer.trim().split_once(";").unwrap();
+enum ReadLineError {
+    SplitFailed,
+    TempParseFailed,
+}
+
+fn read_line(buffer: String) -> Result<(String, i32), ReadLineError> {
+    let (city, temp_str) = buffer
+        .trim()
+        .split_once(";")
+        .ok_or(ReadLineError::SplitFailed)?;
 
     let temp = temp_str
         .parse::<f32>()
-        .unwrap_or_else(|_| {
-            println!("Line: '{}'", buffer);
-            panic!()
-        })
+        .map_err(|_| ReadLineError::TempParseFailed)?
         .ceil() as i32;
 
-    (city.to_string(), temp)
+    Ok((city.to_string(), temp))
 }
 
 fn update_map(
@@ -52,7 +57,7 @@ fn update_map(
     map
 }
 
-fn main() -> Result<()> {
+fn main() -> IoResult<()> {
     let args = env::args().collect::<Vec<_>>();
     let file_path = &args[1];
     let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
@@ -79,7 +84,10 @@ fn main() -> Result<()> {
 
         for line in content.split("\n") {
             if !line.is_empty() {
-                let (city, temp) = read_line(line.into());
+                let (city, temp) = read_line(line.into()).unwrap_or_else(|_| {
+                    eprintln!("Failed to parse line: {}", line);
+                    panic!();
+                });
                 measurement_counts = update_map(measurement_counts, city, temp);
             }
         }

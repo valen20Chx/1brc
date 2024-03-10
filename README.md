@@ -14,3 +14,9 @@ Run `cargo run` to solve the challenge.
 
 You can benchmark the solution with cargo-flamegraph.
 Run `CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph -- <file>` to generate a flamegraph of the solution.
+
+# TODO
+
+- [] Split the file reading in chunks and process each chunk in parallel.
+- [] Try to optimize parsing.
+- [] SIMD

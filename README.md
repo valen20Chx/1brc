@@ -17,6 +17,6 @@ Run `CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph -- <file>` to generate a 
 
 # TODO
 
-- [ ] Split the file reading in chunks and process each chunk in parallel.
+- [x] Split the file reading in chunks and process each chunk in parallel.
 - [ ] Try to optimize parsing.
 - [ ] SIMD

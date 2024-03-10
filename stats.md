@@ -27,7 +27,7 @@ Either the read_line is already optimized or I did something that hampers this s
 
 Edit: After looking into BufReader, it already reads large blocks of data and keeps it in memory.
 
-# Split process on multiple threads : ()
+# Split process on multiple threads : (b09dd31)
 
 ```bash
 time cargo run --release measurements_e9.txt 4

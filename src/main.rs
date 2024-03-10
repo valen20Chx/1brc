@@ -29,32 +29,24 @@ fn read_line(buffer: String) -> Result<(String, i32), ReadLineError> {
     Ok((city.to_string(), temp))
 }
 
-fn update_map(
-    mut map: HashMap<String, MeasurementCounter>,
-    city: String,
-    temp: i32,
-) -> HashMap<String, MeasurementCounter> {
-    map.entry(city)
-        .and_modify(|measurement| {
-            measurement.sum += i64::from(temp);
-            measurement.count += 1;
+fn update_map(map: &mut HashMap<String, MeasurementCounter>, city: String, temp: i32) {
+    let entry = map.entry(city).or_insert(MeasurementCounter {
+        min: temp,
+        max: temp,
+        sum: i64::from(temp),
+        count: 1,
+    });
 
-            if measurement.min > temp {
-                measurement.min = temp;
-            };
+    entry.sum += i64::from(temp);
+    entry.count += 1;
 
-            if measurement.max < temp {
-                measurement.max = temp;
-            };
-        })
-        .or_insert(MeasurementCounter {
-            min: temp,
-            max: temp,
-            sum: i64::from(temp),
-            count: 1,
-        });
+    if entry.min > temp {
+        entry.min = temp;
+    };
 
-    map
+    if entry.max < temp {
+        entry.max = temp;
+    };
 }
 
 fn main() -> IoResult<()> {
@@ -102,7 +94,7 @@ fn main() -> IoResult<()> {
                     eprintln!("Failed to parse line: {}", line);
                     panic!();
                 });
-                measurement_counts = update_map(measurement_counts, city, temp);
+                update_map(&mut measurement_counts, city, temp);
             }
         }
     }

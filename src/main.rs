@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::env;
-use std::io::{prelude::*, Result as IoResult};
+use std::io::prelude::*;
+use std::{env, io};
 use std::{fs::File, io::BufReader};
 
 struct MeasurementCounter {
@@ -26,31 +26,31 @@ fn read_line(buffer: String) -> Result<(String, i32), ReadLineError> {
         .map_err(|_| ReadLineError::TempParseFailed)?
         .ceil() as i32;
 
-    Ok((city.to_string(), temp))
+    Ok((city.to_owned(), temp))
 }
 
 fn update_map(map: &mut HashMap<String, MeasurementCounter>, city: String, temp: i32) {
     let entry = map.entry(city).or_insert(MeasurementCounter {
         min: temp,
         max: temp,
-        sum: i64::from(temp),
+        sum: temp as i64,
         count: 1,
     });
 
-    entry.sum += i64::from(temp);
+    entry.sum += temp as i64;
     entry.count += 1;
-
-    if entry.min > temp {
-        entry.min = temp;
-    };
-
-    if entry.max < temp {
-        entry.max = temp;
-    };
+    entry.min = entry.min.min(temp);
+    entry.max = entry.max.max(temp);
 }
 
-fn main() -> IoResult<()> {
+fn main() -> io::Result<()> {
     let args = env::args().collect::<Vec<_>>();
+
+    if args.len() != 2 {
+        eprintln!("Usage: {} <file>", args[0]);
+        std::process::exit(1);
+    }
+
     let file_path = &args[1];
     let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
 

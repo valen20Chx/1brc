@@ -54,7 +54,11 @@ fn main() -> io::Result<()> {
     let file_path = &args[1];
     let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
 
-    let file = File::open(file_path)?;
+    let file = File::open(file_path).unwrap_or_else(|_| {
+        eprintln!("Failed to open file: {}", file_path);
+        std::process::exit(1);
+    });
+
     let buf_reader = BufReader::new(file);
 
     for line_res in buf_reader.lines() {

@@ -77,28 +77,25 @@ fn main() -> io::Result<()> {
 
             let start = if thread_index > 0 {
                 let start_temp = thread_index * chunk_size;
-                file.seek(io::SeekFrom::Start(start_temp - 1))?;
-
+                file.seek(io::SeekFrom::Start(start_temp))?;
                 let mut buf_reader = BufReader::new(&file);
                 let mut buffer = vec![];
 
                 buf_reader.read_until(b'\n', &mut buffer)?;
-
-                start_temp + buffer.len() as u64 - 1
+                start_temp + buffer.len() as u64
             } else {
-                thread_index * chunk_size
+                0
             };
 
             let end = if thread_index < num_threads - 1 {
-                let temp_end = start + chunk_size;
-                file.seek(io::SeekFrom::Start(temp_end))?;
+                let temp_end = (thread_index + 1) * chunk_size;
 
+                file.seek(io::SeekFrom::Start(temp_end))?;
                 let mut buf_reader = BufReader::new(&file);
                 let mut buffer = vec![];
-
                 buf_reader.read_until(b'\n', &mut buffer)?;
 
-                temp_end + buffer.len() as u64 - 1
+                temp_end + buffer.len() as u64
             } else {
                 file_size
             };

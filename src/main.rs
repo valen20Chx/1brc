@@ -167,10 +167,10 @@ fn process_file_chunk(
 
 fn update_map(map: &mut HashMap<String, MeasurementCounter>, city: String, temp: i32) {
     let entry = map.entry(city).or_insert(MeasurementCounter {
-        min: temp,
-        max: temp,
-        sum: temp as i64,
-        count: 1,
+        min: i32::MAX,
+        max: i32::MIN,
+        sum: 0,
+        count: 0,
     });
 
     entry.sum += temp as i64;

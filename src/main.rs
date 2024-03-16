@@ -4,6 +4,7 @@ use std::sync::mpsc;
 use std::{env, io, thread};
 use std::{fs::File, io::BufReader};
 
+#[derive(Clone)]
 struct MeasurementCounter {
     min: i32,
     max: i32,
@@ -11,37 +12,19 @@ struct MeasurementCounter {
     count: i32,
 }
 
+impl std::fmt::Display for MeasurementCounter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{min={}, max={}, sum={}, count={}}}",
+            self.min, self.max, self.sum, self.count
+        )
+    }
+}
+
 enum ReadLineError {
     SplitFailed,
     TempParseFailed,
-}
-
-fn read_line(buffer: &str) -> Result<(String, i32), ReadLineError> {
-    let (city, temp_str) = buffer
-        .trim()
-        .split_once(";")
-        .ok_or(ReadLineError::SplitFailed)?;
-
-    let temp = temp_str
-        .parse::<f32>()
-        .map_err(|_| ReadLineError::TempParseFailed)?
-        .ceil() as i32;
-
-    Ok((city.to_owned(), temp))
-}
-
-fn update_map(map: &mut HashMap<String, MeasurementCounter>, city: String, temp: i32) {
-    let entry = map.entry(city).or_insert(MeasurementCounter {
-        min: temp,
-        max: temp,
-        sum: temp as i64,
-        count: 1,
-    });
-
-    entry.sum += temp as i64;
-    entry.count += 1;
-    entry.min = entry.min.min(temp);
-    entry.max = entry.max.max(temp);
 }
 
 fn main() -> io::Result<()> {
@@ -73,53 +56,14 @@ fn main() -> io::Result<()> {
         let tx = tx.clone();
 
         let thread = thread::spawn(move || -> io::Result<()> {
-            let mut file = File::open(&file_path)?;
-
-            let start = if thread_index > 0 {
-                let start_temp = thread_index * chunk_size;
-                file.seek(io::SeekFrom::Start(start_temp))?;
-                let mut buf_reader = BufReader::new(&file);
-                let mut buffer = vec![];
-
-                buf_reader.read_until(b'\n', &mut buffer)?;
-                start_temp + buffer.len() as u64
-            } else {
-                0
-            };
-
-            let end = if thread_index < num_threads - 1 {
-                let temp_end = (thread_index + 1) * chunk_size;
-
-                file.seek(io::SeekFrom::Start(temp_end))?;
-                let mut buf_reader = BufReader::new(&file);
-                let mut buffer = vec![];
-                buf_reader.read_until(b'\n', &mut buffer)?;
-
-                temp_end + buffer.len() as u64
-            } else {
-                file_size
-            };
-
-            let mut file = File::open(file_path)?;
-            file.seek(io::SeekFrom::Start(start))?;
-
-            let file = file.take(end - start);
-
-            let buf_reader = BufReader::new(file);
-
-            let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
-
-            for line in buf_reader.lines() {
-                let line = line?;
-                if let Ok((city, temp)) = read_line(&line) {
-                    update_map(&mut measurement_counts, city, temp);
-                } else {
-                    eprintln!("Failed to parse line: {}", line);
-                }
-            }
-
-            tx.send(measurement_counts).unwrap();
-            Ok(())
+            process_file_chunk(
+                file_path,
+                thread_index,
+                chunk_size,
+                num_threads,
+                file_size,
+                tx,
+            )
         });
 
         threads.push(thread);
@@ -127,38 +71,136 @@ fn main() -> io::Result<()> {
 
     drop(tx);
 
-    let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
+    let measurement_counts = merge_threads_measurements(num_threads, rx);
 
+    for (city, data) in measurement_counts {
+        let average = data.sum / i64::from(data.count);
+
+        println!("{}: {};", city, data);
+        println!(
+            "{key};{min};{max};{average};{count};{sum}",
+            key = city,
+            min = data.min,
+            max = data.max,
+            average = average,
+            count = data.count,
+            sum = data.sum
+        );
+    }
+
+    Ok(())
+}
+
+fn merge_threads_measurements(
+    num_threads: u64,
+    rx: mpsc::Receiver<HashMap<String, MeasurementCounter>>,
+) -> HashMap<String, MeasurementCounter> {
+    let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
     for _ in 0..num_threads {
         let thread_measurements = rx.recv().unwrap();
 
         for (city, data) in thread_measurements {
             let entry = measurement_counts
-                .entry(city)
+                .entry(city.clone())
                 .or_insert(MeasurementCounter {
-                    min: data.min,
-                    max: data.max,
-                    sum: data.sum,
-                    count: data.count,
+                    min: i32::MAX,
+                    max: i32::MIN,
+                    sum: 0,
+                    count: 0,
                 });
+
+            println!("{}: data={}; entry={} ", city, data, entry,);
+
             entry.sum += data.sum;
             entry.count += data.count;
             entry.min = entry.min.min(data.min);
             entry.max = entry.max.max(data.max);
         }
     }
+    measurement_counts
+}
 
-    for (city, data) in measurement_counts {
-        let average = data.sum / i64::from(data.count);
+fn process_file_chunk(
+    file_path: String,
+    thread_index: u64,
+    chunk_size: u64,
+    num_threads: u64,
+    file_size: u64,
+    tx: mpsc::Sender<HashMap<String, MeasurementCounter>>,
+) -> Result<(), io::Error> {
+    let mut file = File::open(&file_path)?;
 
-        println!(
-            "{key};{min};{max};{average}",
-            key = city,
-            min = data.min,
-            max = data.max,
-            average = average
-        );
+    let start = if thread_index > 0 {
+        let start_temp = thread_index * chunk_size;
+        file.seek(io::SeekFrom::Start(start_temp))?;
+        let mut buf_reader = BufReader::new(&file);
+        let mut buffer = vec![];
+
+        buf_reader.read_until(b'\n', &mut buffer)?;
+        start_temp + buffer.len() as u64
+    } else {
+        0
+    };
+
+    let end = if thread_index < num_threads - 1 {
+        let temp_end = (thread_index + 1) * chunk_size;
+
+        file.seek(io::SeekFrom::Start(temp_end))?;
+        let mut buf_reader = BufReader::new(&file);
+        let mut buffer = vec![];
+        buf_reader.read_until(b'\n', &mut buffer)?;
+
+        temp_end + buffer.len() as u64
+    } else {
+        file_size
+    };
+
+    let mut file = File::open(file_path)?;
+    file.seek(io::SeekFrom::Start(start))?;
+
+    let file = file.take(end - start);
+
+    let buf_reader = BufReader::new(file);
+
+    let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
+
+    for line in buf_reader.lines() {
+        let line = line?;
+        if let Ok((city, temp)) = read_line(&line) {
+            update_map(&mut measurement_counts, city, temp);
+        } else {
+            eprintln!("Failed to parse line: {}", line);
+        }
     }
 
+    tx.send(measurement_counts).unwrap();
     Ok(())
+}
+
+fn update_map(map: &mut HashMap<String, MeasurementCounter>, city: String, temp: i32) {
+    let entry = map.entry(city).or_insert(MeasurementCounter {
+        min: temp,
+        max: temp,
+        sum: temp as i64,
+        count: 1,
+    });
+
+    entry.sum += temp as i64;
+    entry.count += 1;
+    entry.min = entry.min.min(temp);
+    entry.max = entry.max.max(temp);
+}
+
+fn read_line(buffer: &str) -> Result<(String, i32), ReadLineError> {
+    let (city, temp_str) = buffer
+        .trim()
+        .split_once(";")
+        .ok_or(ReadLineError::SplitFailed)?;
+
+    let temp = temp_str
+        .parse::<f32>()
+        .map_err(|_| ReadLineError::TempParseFailed)?
+        .ceil() as i32;
+
+    Ok((city.to_owned(), temp))
 }

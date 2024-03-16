@@ -76,15 +76,12 @@ fn main() -> io::Result<()> {
     for (city, data) in measurement_counts {
         let average = data.sum / i64::from(data.count);
 
-        println!("{}: {};", city, data);
         println!(
-            "{key};{min};{max};{average};{count};{sum}",
+            "{key};{min};{max};{average}",
             key = city,
             min = data.min,
             max = data.max,
             average = average,
-            count = data.count,
-            sum = data.sum
         );
     }
 
@@ -109,8 +106,6 @@ fn merge_threads_measurements(
                     count: 0,
                 });
 
-            println!("{}: data={}; entry={} ", city, data, entry,);
-
             entry.sum += data.sum;
             entry.count += data.count;
             entry.min = entry.min.min(data.min);
@@ -128,14 +123,13 @@ fn process_file_chunk(
     file_size: u64,
     tx: mpsc::Sender<HashMap<String, MeasurementCounter>>,
 ) -> Result<(), io::Error> {
-    let mut file = File::open(&file_path)?;
+    let file = File::open(&file_path)?;
+    let mut buf_reader = BufReader::new(file);
 
     let start = if thread_index > 0 {
         let start_temp = thread_index * chunk_size;
-        file.seek(io::SeekFrom::Start(start_temp))?;
-        let mut buf_reader = BufReader::new(&file);
+        buf_reader.seek(io::SeekFrom::Start(start_temp))?;
         let mut buffer = vec![];
-
         buf_reader.read_until(b'\n', &mut buffer)?;
         start_temp + buffer.len() as u64
     } else {
@@ -144,27 +138,21 @@ fn process_file_chunk(
 
     let end = if thread_index < num_threads - 1 {
         let temp_end = (thread_index + 1) * chunk_size;
-
-        file.seek(io::SeekFrom::Start(temp_end))?;
-        let mut buf_reader = BufReader::new(&file);
+        buf_reader.seek(io::SeekFrom::Start(temp_end))?;
         let mut buffer = vec![];
         buf_reader.read_until(b'\n', &mut buffer)?;
-
         temp_end + buffer.len() as u64
     } else {
         file_size
     };
 
-    let mut file = File::open(file_path)?;
-    file.seek(io::SeekFrom::Start(start))?;
+    buf_reader.seek(io::SeekFrom::Start(start))?;
 
-    let file = file.take(end - start);
-
-    let buf_reader = BufReader::new(file);
+    let limited_reader = buf_reader.take(end - start);
 
     let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
 
-    for line in buf_reader.lines() {
+    for line in limited_reader.lines() {
         let line = line?;
         if let Ok((city, temp)) = read_line(&line) {
             update_map(&mut measurement_counts, city, temp);

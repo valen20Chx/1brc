@@ -123,32 +123,7 @@ fn process_file_chunk(
     file_size: u64,
     tx: mpsc::Sender<HashMap<String, MeasurementCounter>>,
 ) -> Result<(), io::Error> {
-    let file = File::open(&file_path)?;
-    let mut buf_reader = BufReader::new(file);
-
-    let start = if thread_index > 0 {
-        let start_temp = thread_index * chunk_size;
-        buf_reader.seek(io::SeekFrom::Start(start_temp))?;
-        let mut buffer = vec![];
-        buf_reader.read_until(b'\n', &mut buffer)?;
-        start_temp + buffer.len() as u64
-    } else {
-        0
-    };
-
-    let end = if thread_index < num_threads - 1 {
-        let temp_end = (thread_index + 1) * chunk_size;
-        buf_reader.seek(io::SeekFrom::Start(temp_end))?;
-        let mut buffer = vec![];
-        buf_reader.read_until(b'\n', &mut buffer)?;
-        temp_end + buffer.len() as u64
-    } else {
-        file_size
-    };
-
-    buf_reader.seek(io::SeekFrom::Start(start))?;
-
-    let limited_reader = buf_reader.take(end - start);
+    let limited_reader = fun_name(file_path, thread_index, chunk_size, num_threads, file_size)?;
 
     let mut measurement_counts = HashMap::<String, MeasurementCounter>::new();
 
@@ -163,6 +138,38 @@ fn process_file_chunk(
 
     tx.send(measurement_counts).unwrap();
     Ok(())
+}
+
+fn fun_name(
+    file_path: String,
+    thread_index: u64,
+    chunk_size: u64,
+    num_threads: u64,
+    file_size: u64,
+) -> Result<io::Take<BufReader<File>>, io::Error> {
+    let file = File::open(&file_path)?;
+    let mut buf_reader = BufReader::new(file);
+    let start = if thread_index > 0 {
+        let start_temp = thread_index * chunk_size;
+        buf_reader.seek(io::SeekFrom::Start(start_temp))?;
+        let mut buffer = vec![];
+        buf_reader.read_until(b'\n', &mut buffer)?;
+        start_temp + buffer.len() as u64
+    } else {
+        0
+    };
+    let end = if thread_index < num_threads - 1 {
+        let temp_end = (thread_index + 1) * chunk_size;
+        buf_reader.seek(io::SeekFrom::Start(temp_end))?;
+        let mut buffer = vec![];
+        buf_reader.read_until(b'\n', &mut buffer)?;
+        temp_end + buffer.len() as u64
+    } else {
+        file_size
+    };
+    buf_reader.seek(io::SeekFrom::Start(start))?;
+    let limited_reader = buf_reader.take(end - start);
+    Ok(limited_reader)
 }
 
 fn update_map(map: &mut HashMap<String, MeasurementCounter>, city: String, temp: i32) {

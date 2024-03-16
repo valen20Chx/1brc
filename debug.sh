@@ -8,7 +8,7 @@ done
 
 for i in 2 4 8; do
 	echo "Diff between 1 and $i threads :"
-	diff -y --suppress-common-lines temp1.txt temp$i.txt | tail
+	diff -y --suppress-common-lines temp1.txt temp$i.txt | tail -n 5
 	echo "[Total : $(diff -y --suppress-common-lines temp1.txt temp$i.txt | wc -l)]"
 
 	echo ""

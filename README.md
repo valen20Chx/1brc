@@ -23,4 +23,5 @@ Run `./debug.sh` to see diff between number of threads.
 
 - [x] Split the file reading in chunks and process each chunk in parallel.
 - [ ] Try to optimize parsing.
+- [ ] Simpler and faster hash function, since we have a limited number of possible keys.
 - [ ] SIMD
